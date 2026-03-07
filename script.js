@@ -1,23 +1,22 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-  // --- CONFIG DA VIAGEM ---
-  const TEMPO_TOTAL_HORAS = 72;
+  // --- CONFIG ---
   const SENHA_ACESSO = "GO2026";
 
-  // Coordenadas
   const COORDS = {
-    start: [-59.9777, -3.08448],   // Manaus
+    start: [-59.9777, -3.08448], // Manaus
     end: [-48.5766783, -25.5770063] // Paranaguá
   };
 
   // PRF Campo Grande
   const PRF = {
     lat: -20.4697,
-    lng: -54.6201,
-    mensagem: "RETIDO NA PRF — FALTA DE DOCUMENTAÇÃO"
+    lng: -54.6201
   };
 
-  let map, polyline, vehicleMarker, prfMarker;
+  let map;
+  let polyline;
+  let vehicleMarker;
   let fullRoute = [];
   let indicePRF = 0;
 
@@ -25,6 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnLogin = document.getElementById("btn-login");
 
   if (btnLogin) {
+
     btnLogin.addEventListener("click", () => {
 
       const input = document.getElementById("access-code");
@@ -33,10 +33,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (input.value.toUpperCase() === SENHA_ACESSO) {
 
         localStorage.setItem("viagem_ativa", "true");
-
-        if (!localStorage.getItem("inicio_viagem_manaus_pr")) {
-          localStorage.setItem("inicio_viagem_manaus_pr", Date.now());
-        }
 
         btnLogin.innerText = "Carregando rota...";
         btnLogin.disabled = true;
@@ -51,13 +47,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
     });
+
   }
 
   if (localStorage.getItem("viagem_ativa") === "true") {
     document.getElementById("access-code").value = SENHA_ACESSO;
+    iniciarSistema();
   }
 
-  // --- SISTEMA ---
+  // --- INICIAR ---
   async function iniciarSistema() {
 
     try {
@@ -68,8 +66,6 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("info-card").style.display = "flex";
 
       criarMapa();
-
-      setInterval(atualizarPosicao, 1000);
 
       atualizarPosicao();
 
@@ -82,6 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   }
 
+  // --- BUSCAR ROTA ---
   async function buscarRotaReal() {
 
     const url = `https://router.project-osrm.org/route/v1/driving/${COORDS.start[0]},${COORDS.start[1]};${COORDS.end[0]},${COORDS.end[1]}?overview=full&geometries=geojson`;
@@ -93,7 +90,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       fullRoute = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
 
-      calcularIndicePRF();
+      encontrarPRF();
 
     } else {
 
@@ -103,7 +100,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   }
 
-  function calcularIndicePRF() {
+  // --- ENCONTRAR PONTO MAIS PROXIMO DA PRF ---
+  function encontrarPRF() {
 
     let menorDist = Infinity;
 
@@ -125,6 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   }
 
+  // --- MAPA ---
   function criarMapa() {
 
     map = L.map("map", { zoomControl: false }).setView(fullRoute[0], 5);
@@ -140,87 +139,56 @@ document.addEventListener("DOMContentLoaded", () => {
 
     map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
 
-    L.marker(fullRoute[0]).addTo(map).bindPopup("<b>Origem:</b> Manaus-AM");
+    // origem
+    L.marker(fullRoute[0])
+      .addTo(map)
+      .bindPopup("<b>Origem:</b> Manaus-AM");
 
-    L.marker(fullRoute[fullRoute.length - 1]).addTo(map)
+    // destino
+    L.marker(fullRoute[fullRoute.length - 1])
+      .addTo(map)
       .bindPopup("<b>Destino:</b> Paranaguá-PR");
 
-    // PRF
+    // icone PRF
     const prfIcon = L.divIcon({
-      className: "prf-marker",
-      html: '<div style="font-size:28px">🚓</div>',
-      iconSize: [30, 30],
-      iconAnchor: [15, 15]
+      html: '<div style="font-size:30px">🚓</div>',
+      iconSize: [30,30],
+      iconAnchor: [15,15]
     });
 
-    prfMarker = L.marker([PRF.lat, PRF.lng], { icon: prfIcon })
+    L.marker([PRF.lat, PRF.lng], { icon: prfIcon })
       .addTo(map)
       .bindPopup("<b>PRF Campo Grande</b><br>Veículo retido");
 
-    // Moto
+    // icone moto
     const motoIcon = L.divIcon({
-      className: "vehicle-marker",
-      html: '<div style="font-size:28px">🏍️</div>',
-      iconSize: [30, 30],
-      iconAnchor: [15, 15]
+      html: '<div style="font-size:30px">🏍️</div>',
+      iconSize: [30,30],
+      iconAnchor: [15,15]
     });
 
-    vehicleMarker = L.marker(fullRoute[0], { icon: motoIcon }).addTo(map);
+    vehicleMarker = L.marker(fullRoute[indicePRF], { icon: motoIcon }).addTo(map);
 
   }
 
+  // --- POSIÇÃO (PARADA NA PRF) ---
   function atualizarPosicao() {
 
-    if (!fullRoute.length) return;
-
-    const inicio = parseInt(localStorage.getItem("inicio_viagem_manaus_pr"));
-    const agora = Date.now();
-
-    const decorrido = agora - inicio;
-
-    const totalMs = TEMPO_TOTAL_HORAS * 60 * 60 * 1000;
-
-    let progresso = decorrido / totalMs;
-
-    progresso = Math.min(Math.max(progresso, 0), 1);
-
-    const maxI = fullRoute.length - 1;
-
-    let idx = progresso * maxI;
-
-    // PARADA NA PRF
-    if (idx >= indicePRF) {
-
-      idx = indicePRF;
-
-      mostrarRetencao();
-
-    }
-
-    const coord = fullRoute[Math.floor(idx)];
+    const coord = fullRoute[indicePRF];
 
     vehicleMarker.setLatLng(coord);
 
-    atualizarUI(progresso);
-
-  }
-
-  function mostrarRetencao() {
-
     const badge = document.getElementById("time-badge");
-
-    badge.innerText = "RETIDO NA PRF — FALTA DE DOCUMENTAÇÃO";
-    badge.style.background = "#dc2626";
-
-  }
-
-  function atualizarUI(progress) {
-
     const bar = document.getElementById("progress-bar");
 
-    bar.style.width = `${(progress * 100).toFixed(1)}%`;
+    badge.innerText = "RETIDO NA PRF DE CAMPO GRANDE — FALTA DE DOCUMENTAÇÃO";
+    badge.style.background = "#dc2626";
+
+    const progresso = (indicePRF / (fullRoute.length - 1)) * 100;
+    bar.style.width = progresso + "%";
 
   }
 
 });
+
 
