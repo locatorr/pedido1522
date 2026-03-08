@@ -6,8 +6,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const COORDS = {
     start: [-60.0217, -3.1190], // Manaus
-    end: [-53.6068646, -23.3919306] // CEP 87530000 - Icaraíma PR
+    end: [-53.6068646, -23.3919306] // Icaraíma PR
   };
+
+  // COORDENADA DE OURO PRETO DO OESTE
+  const OURO_PRETO = [-10.7167, -62.2500];
+
+  // TEMPO DE PARADA EM HORAS
+  const PAUSA_HORAS = 8;
 
   const CHAVE_INICIO = "inicio_viagem";
 
@@ -15,6 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let polyline;
   let vehicleMarker;
   let fullRoute = [];
+  let indiceOuroPreto = null;
   let loop;
 
   // LOGIN
@@ -79,7 +86,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   }
 
-  // BUSCAR ROTA REAL
+  // BUSCAR ROTA
   async function buscarRotaReal() {
 
     const url =
@@ -92,6 +99,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
       fullRoute = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
 
+      // localizar ponto mais próximo de Ouro Preto
+      let menorDist = Infinity;
+
+      fullRoute.forEach((coord, index) => {
+
+        const dist =
+          Math.abs(coord[0] - OURO_PRETO[0]) +
+          Math.abs(coord[1] - OURO_PRETO[1]);
+
+        if (dist < menorDist) {
+          menorDist = dist;
+          indiceOuroPreto = index;
+        }
+
+      });
+
     } else {
 
       throw new Error("Rota não encontrada.");
@@ -100,7 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   }
 
-  // CRIAR MAPA
+  // MAPA
   function criarMapa() {
 
     map = L.map("map", { zoomControl: false }).setView(fullRoute[0], 5);
@@ -126,14 +149,19 @@ document.addEventListener("DOMContentLoaded", () => {
       .addTo(map)
       .bindPopup("<b>Destino:</b> Icaraíma - PR");
 
-    // icone caminhão
-    const truckIcon = L.divIcon({
-      html: '<div style="font-size:34px">🚛</div>',
+    // ouro preto
+    L.marker(OURO_PRETO)
+      .addTo(map)
+      .bindPopup("<b>Parada logística:</b> Ouro Preto do Oeste - RO");
+
+    // icone moto
+    const motoIcon = L.divIcon({
+      html: '<div style="font-size:34px">🏍️</div>',
       iconSize: [34,34],
       iconAnchor: [17,17]
     });
 
-    vehicleMarker = L.marker(fullRoute[0], { icon: truckIcon }).addTo(map);
+    vehicleMarker = L.marker(fullRoute[0], { icon: motoIcon }).addTo(map);
 
   }
 
@@ -145,33 +173,44 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const tempoDecorrido = agora - inicio;
     const tempoTotal = TEMPO_TOTAL_HORAS * 3600000;
+    const pausa = PAUSA_HORAS * 3600000;
 
-    let progresso = tempoDecorrido / tempoTotal;
-
+    let progresso = tempoDecorrido / (tempoTotal + pausa);
     progresso = Math.min(Math.max(progresso, 0), 1);
 
-    const indice = Math.floor(progresso * (fullRoute.length - 1));
-
-    const coord = fullRoute[indice];
-
-    vehicleMarker.setLatLng(coord);
+    let indice = Math.floor(progresso * (fullRoute.length - 1));
 
     const badge = document.getElementById("time-badge");
     const bar = document.getElementById("progress-bar");
 
-    if (progresso >= 1) {
+    // PAUSA EM OURO PRETO
+    if (indice >= indiceOuroPreto && indice <= indiceOuroPreto + 5) {
+
+      indice = indiceOuroPreto;
+
+      badge.innerText =
+        "PARADA EM OURO PRETO DO OESTE — OUTRAS ENTREGAS NA CIDADE";
+
+      badge.style.background = "#f59e0b";
+
+    } else if (progresso >= 1) {
 
       badge.innerText = "ENTREGA REALIZADA";
       badge.style.background = "#16a34a";
 
     } else {
 
-      const horasRestantes = ((tempoTotal - tempoDecorrido) / 3600000).toFixed(1);
+      const horasRestantes =
+        ((tempoTotal - tempoDecorrido) / 3600000).toFixed(1);
 
       badge.innerText = `EM TRÂNSITO — FALTAM ${horasRestantes}h`;
       badge.style.background = "#2563eb";
 
     }
+
+    const coord = fullRoute[indice];
+
+    vehicleMarker.setLatLng(coord);
 
     if (bar) {
       bar.style.width = (progresso * 100) + "%";
