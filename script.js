@@ -1,13 +1,12 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-  // --- CONFIG ---
+  // CONFIG
   const SENHA_ACESSO = "GO2026";
-
-  const TEMPO_TOTAL_HORAS = 72; // 3 dias
+  const TEMPO_TOTAL_HORAS = 72;
 
   const COORDS = {
-    start: [-59.9777, -3.08448], // Manaus
-    end: [-48.5766783, -25.5770063] // Paranaguá
+    start: [-60.0217, -3.1190], // Manaus
+    end: [-53.6068646, -23.3919306] // CEP 87530000 - Icaraíma PR
   };
 
   const CHAVE_INICIO = "inicio_viagem";
@@ -18,7 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let fullRoute = [];
   let loop;
 
-  // --- LOGIN ---
+  // LOGIN
   const btnLogin = document.getElementById("btn-login");
 
   if (btnLogin) {
@@ -57,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
     iniciarSistema();
   }
 
-  // --- INICIAR ---
+  // INICIAR SISTEMA
   async function iniciarSistema() {
 
     try {
@@ -80,10 +79,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   }
 
-  // --- BUSCAR ROTA REAL ---
+  // BUSCAR ROTA REAL
   async function buscarRotaReal() {
 
-    const url = `https://router.project-osrm.org/route/v1/driving/${COORDS.start[0]},${COORDS.start[1]};${COORDS.end[0]},${COORDS.end[1]}?overview=full&geometries=geojson`;
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/${COORDS.start[0]},${COORDS.start[1]};${COORDS.end[0]},${COORDS.end[1]}?overview=full&geometries=geojson`;
 
     const resp = await fetch(url);
     const data = await resp.json();
@@ -100,7 +100,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   }
 
-  // --- MAPA ---
+  // CRIAR MAPA
   function criarMapa() {
 
     map = L.map("map", { zoomControl: false }).setView(fullRoute[0], 5);
@@ -110,8 +110,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }).addTo(map);
 
     polyline = L.polyline(fullRoute, {
-      color: "#1d4ed8",
-      weight: 4
+      color: "#2563eb",
+      weight: 5
     }).addTo(map);
 
     map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
@@ -119,25 +119,25 @@ document.addEventListener("DOMContentLoaded", () => {
     // origem
     L.marker(fullRoute[0])
       .addTo(map)
-      .bindPopup("<b>Origem:</b> Manaus-AM");
+      .bindPopup("<b>Origem:</b> Manaus - AM");
 
     // destino
     L.marker(fullRoute[fullRoute.length - 1])
       .addTo(map)
-      .bindPopup("<b>Destino:</b> Paranaguá-PR");
+      .bindPopup("<b>Destino:</b> Icaraíma - PR");
 
     // icone caminhão
     const truckIcon = L.divIcon({
-      html: '<div style="font-size:32px">🚛</div>',
-      iconSize: [30,30],
-      iconAnchor: [15,15]
+      html: '<div style="font-size:34px">🚛</div>',
+      iconSize: [34,34],
+      iconAnchor: [17,17]
     });
 
     vehicleMarker = L.marker(fullRoute[0], { icon: truckIcon }).addTo(map);
 
   }
 
-  // --- MOVIMENTO EM TEMPO REAL ---
+  // ATUALIZAR POSIÇÃO
   function atualizarPosicao() {
 
     const inicio = parseInt(localStorage.getItem(CHAVE_INICIO));
@@ -169,7 +169,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const horasRestantes = ((tempoTotal - tempoDecorrido) / 3600000).toFixed(1);
 
       badge.innerText = `EM TRÂNSITO — FALTAM ${horasRestantes}h`;
-
       badge.style.background = "#2563eb";
 
     }
