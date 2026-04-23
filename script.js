@@ -1,171 +1,146 @@
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener('DOMContentLoaded', () => {
 
-  const SENHA_ACESSO = "GO2026";
+    // ================= CONFIGURAÇÕES =================
+    // Origem: Poços de Caldas - MG
+const ORIGEM = [-21.7878, -46.5613];
 
-  const COORDS = {
-    start: [-60.0217, -3.1190], // Manaus
-    end: [-53.6068646, -23.3919306] // Icaraíma PR
-  };
+// Destino: Diamantina - MG
+const DESTINO = [-18.2413, -43.6031];
 
-  // COORDENADA DE VILHENA
-  const VILHENA = [-12.7405, -60.1458];
+    // Tempo total de viagem (velocidade reduzida em dobro)
+const DURACAO_VIAGEM = 20 * 60 * 60 * 1000;
+    const STORAGE_START_KEY = 'inicio_viagem';
 
-  const CHAVE_INICIO = "inicio_viagem";
+    let map;
+    let fullRoute = [];
+    let retainedMarker;
+    let polyline;
 
-  let map;
-  let polyline;
-  let vehicleMarker;
-  let fullRoute = [];
-  let indiceVilhena = null;
+    document.getElementById('btn-login')?.addEventListener('click', verificarCodigo);
+    verificarSessaoSalva();
 
-  const btnLogin = document.getElementById("btn-login");
+    // ================= LOGIN =================
+    function verificarCodigo() {
+        const inputElement = document.getElementById('access-code');
+        if (!inputElement) return;
 
-  if (btnLogin) {
+        const code = inputElement.value.trim();
 
-    btnLogin.addEventListener("click", () => {
-
-      const input = document.getElementById("access-code");
-      const errorMsg = document.getElementById("error-msg");
-
-      if (input.value.toUpperCase() === SENHA_ACESSO) {
-
-        localStorage.setItem("viagem_ativa", "true");
-
-        btnLogin.innerText = "Carregando rota...";
-        btnLogin.disabled = true;
-        errorMsg.style.display = "none";
-
-        iniciarSistema();
-
-      } else {
-
-        errorMsg.style.display = "block";
-
-      }
-
-    });
-
-  }
-
-  if (localStorage.getItem("viagem_ativa") === "true") {
-    document.getElementById("access-code").value = SENHA_ACESSO;
-    iniciarSistema();
-  }
-
-  async function iniciarSistema() {
-
-    try {
-
-      await buscarRotaReal();
-
-      document.getElementById("login-overlay").style.display = "none";
-      document.getElementById("info-card").style.display = "flex";
-
-      criarMapa();
-
-      posicionarMoto();
-
-    } catch (err) {
-
-      console.error(err);
-      alert("Erro ao calcular rota.");
-
-    }
-
-  }
-
-  async function buscarRotaReal() {
-
-    const url =
-      `https://router.project-osrm.org/route/v1/driving/${COORDS.start[0]},${COORDS.start[1]};${COORDS.end[0]},${COORDS.end[1]}?overview=full&geometries=geojson`;
-
-    const resp = await fetch(url);
-    const data = await resp.json();
-
-    if (data.routes && data.routes.length > 0) {
-
-      fullRoute = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-
-      let menorDist = Infinity;
-
-      fullRoute.forEach((coord, index) => {
-
-        const dist =
-          Math.abs(coord[0] - VILHENA[0]) +
-          Math.abs(coord[1] - VILHENA[1]);
-
-        if (dist < menorDist) {
-          menorDist = dist;
-          indiceVilhena = index;
+        if (code !== "39450") {
+            alert("Código de rastreio inválido. Tente novamente.");
+            inputElement.value = "";
+            localStorage.removeItem('codigoAtivo');
+            return;
         }
 
-      });
-
-    } else {
-
-      throw new Error("Rota não encontrada.");
-
+        localStorage.setItem('codigoAtivo', code);
+        carregarInterface();
     }
 
-  }
-
-  function criarMapa() {
-
-    map = L.map("map", { zoomControl: false }).setView(fullRoute[0], 5);
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19
-    }).addTo(map);
-
-    polyline = L.polyline(fullRoute, {
-      color: "#2563eb",
-      weight: 5
-    }).addTo(map);
-
-    map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
-
-    L.marker(fullRoute[0])
-      .addTo(map)
-      .bindPopup("<b>Origem:</b> Manaus - AM");
-
-    L.marker(fullRoute[fullRoute.length - 1])
-      .addTo(map)
-      .bindPopup("<b>Destino:</b> Icaraíma - PR");
-
-    L.marker(VILHENA)
-      .addTo(map)
-      .bindPopup("<b>Local atual:</b> Vilhena - RO");
-
-    const motoIcon = L.divIcon({
-      html: '<div style="font-size:34px">🏍️</div>',
-      iconSize: [34,34],
-      iconAnchor: [17,17]
-    });
-
-    vehicleMarker = L.marker(fullRoute[0], { icon: motoIcon }).addTo(map);
-
-  }
-
-  function posicionarMoto() {
-
-    const coord = fullRoute[indiceVilhena];
-
-    vehicleMarker.setLatLng(coord);
-
-    const badge = document.getElementById("time-badge");
-
-    if (badge) {
-      badge.innerText = "RETIDO EM VILHENA — AGUARDANDO LIBERAÇÃO";
-      badge.style.background = "#ef4444";
+    function verificarSessaoSalva() {
+        const codigo = localStorage.getItem('codigoAtivo');
+        if (codigo === "39450") carregarInterface();
     }
 
-    const bar = document.getElementById("progress-bar");
+    function carregarInterface() {
+        const overlay = document.getElementById('login-overlay');
+        const btnLogin = document.getElementById('btn-login');
 
-    if (bar) {
-      bar.style.width = "45%";
+        if (btnLogin) btnLogin.innerText = "Consultando...";
+
+        buscarRotaNaAPI().then(() => {
+            if (overlay) overlay.style.display = 'none';
+            document.getElementById('info-card').style.display = 'flex';
+            iniciarMapa();
+        });
     }
 
-  }
+    // ================= BUSCA NA API =================
+    async function buscarRotaNaAPI() {
+        const ORS_TOKEN = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImQzY2QyNmU1ZWNlOTRjZDJhYTBiZDE0NGU5YmFlYzlhIiwiaCI6Im11cm11cjY0In0=";
 
+        const start = `${ORIGEM[1]},${ORIGEM[0]}`;
+        const end = `${DESTINO[1]},${DESTINO[0]}`;
+
+        const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_TOKEN}&start=${start}&end=${end}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        fullRoute = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    }
+
+    // ================= MAPA =================
+    function iniciarMapa() {
+        if (map) return;
+
+        map = L.map('map', { zoomControl: false }).setView(ORIGEM, 9);
+
+        L.tileLayer(
+            'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+        ).addTo(map);
+
+        polyline = L.polyline(fullRoute, {
+            color: '#2563eb',
+            weight: 5,
+            dashArray: '10,10',
+            opacity: 0.8
+        }).addTo(map);
+
+        const truckStatusIcon = L.divIcon({
+            className: 'custom-marker',
+            html: `<div style="font-size:32px;">🚛</div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 30]
+        });
+
+        retainedMarker = L.marker(ORIGEM, {
+            icon: truckStatusIcon,
+            zIndexOffset: 1000
+        }).addTo(map);
+
+        atualizarStatus();
+        animarCaminhao();
+    }
+
+    // ================= ANIMAÇÃO =================
+    function animarCaminhao() {
+
+        let inicio = localStorage.getItem(STORAGE_START_KEY);
+
+        // cria apenas na primeira vez
+        if (!inicio) {
+            inicio = Date.now();
+            localStorage.setItem(STORAGE_START_KEY, inicio);
+        } else {
+            inicio = parseInt(inicio);
+        }
+
+        function mover() {
+            const agora = Date.now();
+            const progresso = Math.min((agora - inicio) / DURACAO_VIAGEM, 1);
+
+            const index = Math.floor(progresso * (fullRoute.length - 1));
+            const posicao = fullRoute[index];
+
+            if (retainedMarker && posicao) {
+                retainedMarker.setLatLng(posicao);
+            }
+
+            if (progresso < 1) {
+                requestAnimationFrame(mover);
+            }
+        }
+
+        mover();
+    }
+
+    // ================= STATUS =================
+    function atualizarStatus() {
+        const badge = document.getElementById('time-badge');
+        if (badge) {
+            badge.innerText = "EM TRÂNSITO";
+            badge.style.background = "#22c55e";
+            badge.style.color = "white";
+        }
+    }
 });
-
