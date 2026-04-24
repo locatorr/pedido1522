@@ -8,7 +8,7 @@ const ORIGEM = [-21.7878, -46.5613];
 const DESTINO = [-18.2413, -43.6031];
 
     // Tempo total de viagem (velocidade reduzida em dobro)
-const DURACAO_VIAGEM = 20 * 60 * 60 * 1000;
+const DURACAO_VIAGEM = 21 * 60 * 60 * 1000;
     const STORAGE_START_KEY = 'inicio_viagem';
 
     let map;
